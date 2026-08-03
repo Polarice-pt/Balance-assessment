@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Older Adult Balance Assessment Prototype</title>
+  
+  <!-- Official MediaPipe CDNs (Classic Pose + Camera Utils) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #121212; color: #ffffff; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    
+    header { padding: 12px; background: #1e1e1e; text-align: center; border-bottom: 1px solid #333; }
+    header h1 { font-size: 1.1rem; color: #4dabf7; }
+    
+    .nav-tabs { display: flex; background: #252525; }
+    .tab-btn { flex: 1; padding: 10px; background: none; border: none; color: #aaa; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; }
+    .tab-btn.active { color: #4dabf7; border-bottom-color: #4dabf7; background: #1e1e1e; }
+    
+    #container { position: relative; flex: 1; width: 100%; max-width: 600px; margin: 0 auto; background: #000; display: flex; align-items: center; justify-content: center; }
+    video { display: none; }
+    canvas { width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); /* Mirror view */ }
+    
+    .overlay-ui { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; }
+    .badge { background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; border: 1px solid #444; }
+    
+    .controls { padding: 16px; background: #1e1e1e; display: flex; flex-direction: column; gap: 10px; max-width: 600px; margin: 0 auto; width: 100%; }
+    .btn { background: #007aff; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; width: 100%; text-align: center; }
+    .btn:disabled { background: #444; color: #888; }
+    .btn-danger { background: #ff3b30; }
+
+    /* Results Modal */
+    #results-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+    .modal-content { background: #222; border-radius: 14px; padding: 20px; width: 100%; max-width: 400px; border: 1px solid #444; }
+    .modal-content h2 { color: #4dabf7; margin-bottom: 12px; border-bottom: 1px solid #444; padding-bottom: 8px; }
+    .metric-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333; font-size: 0.95rem; }
+    .close-btn { margin-top: 16px; background: #34c759; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Clinical Balance Assessment</h1>
+  </header>
+
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTest('static')">Static</button>
+    <button class="tab-btn" onclick="switchTest('dynamic')">Dynamic</button>
+    <button class="tab-btn" onclick="switchTest('reactive')">Reactive</button>
+  </div>
+
+  <div id="container">
+    <video id="webcam" playsinline></video>
+    <canvas id="output_canvas"></canvas>
+    
+    <div class="overlay-ui">
+      <div class="badge" id="timer-display">Time: 30s</div>
+      <div class="badge" id="status-display">Initializing Camera...</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="start-btn" onclick="toggleTest()" disabled>Loading Vision Engine...</button>
+  </div>
+
+  <!-- Output Modal -->
+  <div id="results-modal">
+    <div class="modal-content">
+      <h2>Assessment Results</h2>
+      <div id="results-body"></div>
+      <button class="btn close-btn" onclick="closeResults()">Done</button>
+    </div>
+  </div>
+
+  <script>
+    // App State Variables
+    let currentTest = 'static'; 
+    let isRunning = false;
+    let timer = 30;
+    let timerInterval = null;
+    
+    const webcam = document.getElementById("webcam");
+    const canvas = document.getElementById("output_canvas");
+    const ctx = canvas.getContext("2d");
+    
+    // Baseline Metrics & Thresholds
+    let baseline = {
+      torsoLengthPx: 0,
+      handL: null, handR: null,
+      hipL: null, hipR: null,
+      ankleL: null, ankleR: null
+    };
+
+    // Output Tracking
+    let metrics = {
+      maxSwayAngle: 0,
+      handsOffHipErrors: 0,
+      stepOutErrors: 0,
+      maxReachNorm: 0,
+      reactiveSuccess: 0,
+      reactiveFailure: 0
+    };
+
+    let fallingObject = null;
+
+    // Initialize MediaPipe Pose using classic Pose + CameraUtils
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults(onResults);
+
+    // Initialize Camera Utility
+    const camera = new Camera(webcam, {
+      onFrame: async () => {
+        await pose.send({ image: webcam });
+      },
+      width: 640,
+      height: 480
+    });
+
+    camera.start().then(() => {
+      document.getElementById("start-btn").disabled = false;
+      document.getElementById("start-btn").innerText = "Start Test";
+      document.getElementById("status-display").innerText = "Ready - Stand in View";
+    }).catch(err => {
+      document.getElementById("status-display").innerText = "Camera Error! Use HTTP/HTTPS server.";
+      console.error("Camera startup error:", err);
+    });
+
+    function onResults(results) {
+      canvas.width = webcam.videoWidth || 640;
+      canvas.height = webcam.videoHeight || 480;
+
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results.poseLandmarks) {
+        const lm = results.poseLandmarks;
+        drawPoseOverlay(lm);
+
+        if (isRunning) {
+          processAssessmentLogic(lm);
+        } else {
+          captureBaseline(lm);
+        }
+      }
+      ctx.restore();
+    }
+
+    function captureBaseline(lm) {
+      const nose = lm[0], lHip = lm[23], rHip = lm[24], lAnkle = lm[27], rAnkle = lm[28];
+      const midHip = { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 };
+      
+      const dx = (nose.x - midHip.x) * canvas.width;
+      const dy = (nose.y - midHip.y) * canvas.height;
+      baseline.torsoLengthPx = Math.sqrt(dx*dx + dy*dy) || 1;
+
+      baseline.handL = lm[15]; baseline.handR = lm[16];
+      baseline.hipL = lHip; baseline.hipR = rHip;
+      baseline.ankleL = lAnkle; baseline.ankleR = rAnkle;
+    }
+
+    function processAssessmentLogic(lm) {
+      const nose = lm[0], lHip = lm[23], rHip = lm[24];
+      const lWrist = lm[15], rWrist = lm[16];
+      const lAnkle = lm[27], rAnkle = lm[28];
+      const midHip = { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 };
+
+      if (currentTest === 'static') {
+        const dx = (nose.x - midHip.x) * canvas.width;
+        const dy = (midHip.y - nose.y) * canvas.height; 
+        let angleDeg = Math.abs(Math.atan2(dx, dy) * (180 / Math.PI));
+        
+        if (angleDeg > metrics.maxSwayAngle) metrics.maxSwayAngle = angleDeg;
+
+        const distLHandHip = Math.hypot(lWrist.x - lHip.x, lWrist.y - lHip.y);
+        const distRHandHip = Math.hypot(rWrist.x - rHip.x, rWrist.y - rHip.y);
+        if (distLHandHip > 0.18 || distRHandHip > 0.18) {
+          metrics.handsOffHipErrors += 1;
+        }
+
+        const distLAnkle = Math.hypot(lAnkle.x - baseline.ankleL.x, lAnkle.y - baseline.ankleL.y);
+        const distRAnkle = Math.hypot(rAnkle.x - baseline.ankleR.x, rAnkle.y - baseline.ankleR.y);
+        if (distLAnkle > 0.08 || distRAnkle > 0.08) {
+          metrics.stepOutErrors += 1;
+        }
+      } 
+      else if (currentTest === 'dynamic') {
+        const reachL = Math.abs(lWrist.x - baseline.handL.x) * canvas.width;
+        const reachR = Math.abs(rWrist.x - baseline.handR.x) * canvas.width;
+        const maxPx = Math.max(reachL, reachR);
+        
+        const normReach = (maxPx / baseline.torsoLengthPx).toFixed(2);
+        if (parseFloat(normReach) > metrics.maxReachNorm) {
+          metrics.maxReachNorm = parseFloat(normReach);
+        }
+      } 
+      else if (currentTest === 'reactive') {
+        if (!fallingObject) spawnFallingObject();
+
+        fallingObject.y += 0.015;
+        drawFallingObject(fallingObject);
+
+        const nosePx = { x: nose.x * canvas.width, y: nose.y * canvas.height };
+        const objPx = { x: fallingObject.x * canvas.width, y: fallingObject.y * canvas.height };
+        const dist = Math.hypot(nosePx.x - objPx.x, nosePx.y - objPx.y);
+
+        if (dist < 40) { 
+          metrics.reactiveFailure++;
+          spawnFallingObject();
+        } else if (fallingObject.y > 1.0) { 
+          metrics.reactiveSuccess++;
+          spawnFallingObject();
+        }
+      }
+    }
+
+    function drawPoseOverlay(lm) {
+      const nose = lm[0], lHip = lm[23], rHip = lm[24];
+      const midHip = { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 };
+
+      // Center Line (Nose to Mid-Hip)
+      ctx.beginPath();
+      ctx.moveTo(nose.x * canvas.width, nose.y * canvas.height);
+      ctx.lineTo(midHip.x * canvas.width, midHip.y * canvas.height);
+      ctx.strokeStyle = "#00ff00";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Landmarks
+      [nose, lHip, rHip, lm[15], lm[16], lm[27], lm[28]].forEach(pt => {
+        ctx.beginPath();
+        ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 6, 0, 2 * Math.PI);
+        ctx.fillStyle = "#ff0055";
+        ctx.fill();
+      });
+    }
+
+    function spawnFallingObject() {
+      fallingObject = { x: Math.random() * 0.6 + 0.2, y: 0.0 };
+    }
+
+    function drawFallingObject(obj) {
+      ctx.beginPath();
+      ctx.arc(obj.x * canvas.width, obj.y * canvas.height, 20, 0, 2 * Math.PI);
+      ctx.fillStyle = "#ffcc00";
+      ctx.fill();
+    }
+
+    window.switchTest = function(type) {
+      if (isRunning) window.toggleTest();
+      currentTest = type;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      
+      timer = (type === 'reactive') ? 60 : 30;
+      document.getElementById("timer-display").innerText = `Time: ${timer}s`;
+    }
+
+    window.toggleTest = function() {
+      const btn = document.getElementById("start-btn");
+      if (!isRunning) {
+        isRunning = true;
+        btn.innerText = "Stop Test";
+        btn.classList.add("btn-danger");
+        resetMetrics();
+        
+        timerInterval = setInterval(() => {
+          timer--;
+          document.getElementById("timer-display").innerText = `Time: ${timer}s`;
+          if (timer <= 0) finishTest();
+        }, 1000);
+      } else {
+        finishTest();
+      }
+    }
+
+    function resetMetrics() {
+      metrics = { maxSwayAngle: 0, handsOffHipErrors: 0, stepOutErrors: 0, maxReachNorm: 0, reactiveSuccess: 0, reactiveFailure: 0 };
+    }
+
+    function finishTest() {
+      clearInterval(timerInterval);
+      isRunning = false;
+      
+      const btn = document.getElementById("start-btn");
+      btn.innerText = "Start Test";
+      btn.classList.remove("btn-danger");
+
+      showResults();
+    }
+
+    function showResults() {
+      const modal = document.getElementById("results-modal");
+      const body = document.getElementById("results-body");
+      
+      let content = "";
+      if (currentTest === 'static') {
+        content = `
+          <div class="metric-row"><span>Max Sway Angle:</span><strong>${metrics.maxSwayAngle.toFixed(1)}°</strong></div>
+          <div class="metric-row"><span>Hands-off-Hip Errors:</span><strong>${Math.floor(metrics.handsOffHipErrors / 10)}</strong></div>
+          <div class="metric-row"><span>Foot Step-Out Errors:</span><strong>${Math.floor(metrics.stepOutErrors / 10)}</strong></div>
+        `;
+      } else if (currentTest === 'dynamic') {
+        content = `
+          <div class="metric-row"><span>Max Reach Distance:</span><strong>${metrics.maxReachNorm} torso units</strong></div>
+        `;
+      } else if (currentTest === 'reactive') {
+        content = `
+          <div class="metric-row"><span>Successful Avoidances:</span><strong>${metrics.reactiveSuccess}</strong></div>
+          <div class="metric-row"><span>Evasion Failures:</span><strong>${metrics.reactiveFailure}</strong></div>
+        `;
+      }
+      
+      body.innerHTML = content;
+      modal.style.display = "flex";
+    }
+
+    window.closeResults = function() {
+      document.getElementById("results-modal").style.display = "none";
+      switchTest(currentTest);
+    }
+  </script>
+</body>
+</html>
