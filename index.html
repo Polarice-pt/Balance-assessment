@@ -13,74 +13,106 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: #121212; color: #ffffff; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
     
-    header { padding: 12px; background: #1e1e1e; text-align: center; border-bottom: 1px solid #333; }
+    header { padding: 14px; background: #1e1e1e; text-align: center; border-bottom: 1px solid #333; position: relative; }
     header h1 { font-size: 1.1rem; color: #4dabf7; }
     
-    .nav-tabs { display: flex; background: #252525; }
-    .tab-btn { flex: 1; padding: 10px; background: none; border: none; color: #aaa; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; }
-    .tab-btn.active { color: #4dabf7; border-bottom-color: #4dabf7; background: #1e1e1e; }
-    
+    .back-btn { position: absolute; left: 12px; top: 12px; background: #333; color: #4dabf7; border: 1px solid #444; padding: 6px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; display: none; }
+
+    /* Main Menu Screen */
+    #menu-screen { flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 500px; margin: 0 auto; width: 100%; justify-content: center; }
+    .menu-card { background: #1e1e1e; border: 1px solid #333; border-radius: 14px; padding: 20px; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+    .menu-card:active { background: #2a2a2a; transform: scale(0.98); }
+    .menu-card h3 { color: #4dabf7; margin-bottom: 6px; font-size: 1.2rem; }
+    .menu-card p { color: #aaa; font-size: 0.88rem; line-height: 1.3; }
+
+    /* Assessment View Screen */
+    #test-screen { flex: 1; display: none; flex-direction: column; position: relative; }
     #container { position: relative; flex: 1; width: 100%; max-width: 600px; margin: 0 auto; background: #000; display: flex; align-items: center; justify-content: center; }
-    /* Video hidden visually but kept active in DOM */
     video { display: none; }
-    /* Canvas renders video frame + pose visual overlay */
     canvas { width: 100%; height: 100%; object-fit: contain; }
     
     .overlay-ui { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; }
-    .badge { background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; border: 1px solid #444; }
+    .badge { background: rgba(0,0,0,0.75); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; border: 1px solid #444; }
     
-    .controls { padding: 16px; background: #1e1e1e; display: flex; flex-direction: column; gap: 10px; max-width: 600px; margin: 0 auto; width: 100%; }
-    .btn { background: #007aff; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; width: 100%; text-align: center; }
+    .controls { padding: 16px; background: #1e1e1e; display: flex; gap: 10px; max-width: 600px; margin: 0 auto; width: 100%; }
+    .btn { background: #007aff; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; flex: 1; text-align: center; }
     .btn:disabled { background: #444; color: #888; }
+    .btn-secondary { background: #333; color: #fff; border: 1px solid #555; }
     .btn-danger { background: #ff3b30; }
 
     /* Results Modal */
     #results-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
-    .modal-content { background: #222; border-radius: 14px; padding: 20px; width: 100%; max-width: 400px; border: 1px solid #444; }
+    .modal-content { background: #222; border-radius: 14px; padding: 20px; width: 100%; max-width: 440px; border: 1px solid #444; max-height: 90vh; overflow-y: auto; }
     .modal-content h2 { color: #4dabf7; margin-bottom: 12px; border-bottom: 1px solid #444; padding-bottom: 8px; }
-    .metric-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333; font-size: 0.95rem; }
-    .close-btn { margin-top: 16px; background: #34c759; }
+    .trial-box { background: #1a1a1a; border-radius: 8px; padding: 10px; margin-bottom: 10px; border: 1px solid #333; }
+    .trial-box h4 { color: #ffcc00; font-size: 0.9rem; margin-bottom: 4px; }
+    .metric-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.88rem; }
+    .summary-box { background: #2b3842; border: 1px solid #4dabf7; border-radius: 8px; padding: 10px; margin-top: 12px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>Clinical Balance Assessment</h1>
+    <button class="back-btn" id="back-btn" onclick="goToMenu()">&lt; Back</button>
+    <h1 id="header-title">Balance Assessment</h1>
   </header>
 
-  <div class="nav-tabs">
-    <button class="tab-btn active" onclick="switchTest('static')">Static</button>
-    <button class="tab-btn" onclick="switchTest('dynamic')">Dynamic</button>
-    <button class="tab-btn" onclick="switchTest('reactive')">Reactive</button>
-  </div>
-
-  <div id="container">
-    <!-- Attributes 'autoplay', 'playsinline', and 'muted' are mandatory for mobile browsers -->
-    <video id="webcam" autoplay playsinline muted></video>
-    <canvas id="output_canvas"></canvas>
+  <!-- Main Selection Menu -->
+  <div id="menu-screen">
+    <div class="menu-card" onclick="selectTest('static')">
+      <h3>Static Balance</h3>
+      <p>Evaluates vertical postural sway angle, hands-on-hip maintenance, and foot step-outs (30s per trial).</p>
+    </div>
     
-    <div class="overlay-ui">
-      <div class="badge" id="timer-display">Time: 30s</div>
-      <div class="badge" id="status-display">Initializing Camera...</div>
+    <div class="menu-card" onclick="selectTest('dynamic')">
+      <h3>Dynamic Balance</h3>
+      <p>Measures horizontal Limits of Stability (LOS) arm reach distance relative to torso scale.</p>
+    </div>
+
+    <div class="menu-card" onclick="selectTest('reactive')">
+      <h3>Reactive Balance</h3>
+      <p>Tests rapid stepping evasion responses against falling visual obstacles (60s per trial).</p>
     </div>
   </div>
 
-  <div class="controls">
-    <button class="btn" id="start-btn" onclick="toggleTest()" disabled>Loading Vision Engine...</button>
+  <!-- Active Assessment Screen -->
+  <div id="test-screen">
+    <div id="container">
+      <video id="webcam" autoplay playsinline muted></video>
+      <canvas id="output_canvas"></canvas>
+      
+      <div class="overlay-ui">
+        <div class="badge" id="trial-display">Trial 1 of 3</div>
+        <div class="badge" id="timer-display">Time: 30s</div>
+        <div class="badge" id="status-display">Aligning Body...</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-secondary" id="restart-btn" onclick="restartCurrentTest()">Restart</button>
+      <button class="btn" id="start-btn" onclick="toggleTestFrame()" disabled>Loading Vision...</button>
+    </div>
   </div>
 
-  <!-- Output Modal -->
+  <!-- Output / Trial Results Modal -->
   <div id="results-modal">
     <div class="modal-content">
-      <h2>Assessment Results</h2>
+      <h2 id="results-title">Assessment Completed</h2>
       <div id="results-body"></div>
-      <button class="btn close-btn" onclick="closeResults()">Done</button>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="restartCurrentTest()">Restart Test</button>
+        <button class="btn" onclick="goToMenu()">Main Menu</button>
+      </div>
     </div>
   </div>
 
   <script>
     // App State Variables
-    let currentTest = 'static'; 
+    let currentTest = null; 
+    let currentTrial = 1; // 1 to 3
+    const totalTrials = 3;
+    
     let isRunning = false;
     let timer = 30;
     let timerInterval = null;
@@ -89,16 +121,11 @@
     const canvas = document.getElementById("output_canvas");
     const ctx = canvas.getContext("2d");
     
-    // Baseline Metrics & Thresholds
-    let baseline = {
-      torsoLengthPx: 0,
-      handL: null, handR: null,
-      hipL: null, hipR: null,
-      ankleL: null, ankleR: null
-    };
+    // Multi-trial data store
+    let trialHistory = [];
 
-    // Output Tracking
-    let metrics = {
+    // Current Active Trial Metrics
+    let activeMetrics = {
       maxSwayAngle: 0,
       handsOffHipErrors: 0,
       stepOutErrors: 0,
@@ -107,9 +134,11 @@
       reactiveFailure: 0
     };
 
+    let baseline = { torsoLengthPx: 1, ankleL: null, ankleR: null };
     let fallingObject = null;
+    let cameraInstance = null;
 
-    // Initialize MediaPipe Pose
+    // MediaPipe Pose Setup
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
     });
@@ -123,24 +152,126 @@
 
     pose.onResults(onResults);
 
-    // Initialize Camera Utility
-    const camera = new Camera(webcam, {
-      onFrame: async () => {
-        await pose.send({ image: webcam });
-      },
-      width: 640,
-      height: 480
-    });
+    // Screen & Navigation Management
+    function selectTest(type) {
+      currentTest = type;
+      currentTrial = 1;
+      trialHistory = [];
+      
+      document.getElementById("menu-screen").style.display = "none";
+      document.getElementById("test-screen").style.display = "flex";
+      document.getElementById("back-btn").style.display = "block";
+      
+      const titles = { static: "Static Balance", dynamic: "Dynamic Balance", reactive: "Reactive Balance" };
+      document.getElementById("header-title").innerText = titles[type];
+      
+      resetTrialUI();
+      startCamera();
+    }
 
-    camera.start().then(() => {
-      document.getElementById("start-btn").disabled = false;
-      document.getElementById("start-btn").innerText = "Start Test";
-      document.getElementById("status-display").innerText = "Ready - Stand in View";
-    }).catch(err => {
-      document.getElementById("status-display").innerText = "Camera Error! Allow camera permissions.";
-      console.error("Camera startup error:", err);
-    });
+    function goToMenu() {
+      stopTestFrame();
+      stopCamera();
 
+      document.getElementById("test-screen").style.display = "none";
+      document.getElementById("results-modal").style.display = "none";
+      document.getElementById("menu-screen").style.display = "flex";
+      document.getElementById("back-btn").style.display = "none";
+      document.getElementById("header-title").innerText = "Balance Assessment";
+      
+      currentTest = null;
+    }
+
+    function startCamera() {
+      if (!cameraInstance) {
+        document.getElementById("status-display").innerText = "Starting Camera...";
+        cameraInstance = new Camera(webcam, {
+          onFrame: async () => { await pose.send({ image: webcam }); },
+          width: 640,
+          height: 480
+        });
+        
+        cameraInstance.start().then(() => {
+          document.getElementById("start-btn").disabled = false;
+          document.getElementById("start-btn").innerText = "Start Trial 1";
+          document.getElementById("status-display").innerText = "Ready - Stand in View";
+        }).catch(err => {
+          document.getElementById("status-display").innerText = "Camera Access Error";
+        });
+      }
+    }
+
+    function stopCamera() {
+      if (cameraInstance) {
+        // Camera stops automatically when element context is unmounted or reset
+        cameraInstance = null;
+      }
+    }
+
+    // Trial Flow Controls
+    function resetTrialUI() {
+      timer = (currentTest === 'reactive') ? 60 : 30;
+      document.getElementById("trial-display").innerText = `Trial ${currentTrial} of ${totalTrials}`;
+      document.getElementById("timer-display").innerText = `Time: ${timer}s`;
+      document.getElementById("start-btn").innerText = `Start Trial ${currentTrial}`;
+      document.getElementById("start-btn").classList.remove("btn-danger");
+      document.getElementById("results-modal").style.display = "none";
+      resetActiveMetrics();
+    }
+
+    function resetActiveMetrics() {
+      activeMetrics = { maxSwayAngle: 0, handsOffHipErrors: 0, stepOutErrors: 0, maxReachNorm: 0, reactiveSuccess: 0, reactiveFailure: 0 };
+    }
+
+    function restartCurrentTest() {
+      stopTestFrame();
+      currentTrial = 1;
+      trialHistory = [];
+      resetTrialUI();
+    }
+
+    function toggleTestFrame() {
+      const btn = document.getElementById("start-btn");
+      if (!isRunning) {
+        isRunning = true;
+        btn.innerText = "Stop Trial";
+        btn.classList.add("btn-danger");
+        resetActiveMetrics();
+        
+        timerInterval = setInterval(() => {
+          timer--;
+          document.getElementById("timer-display").innerText = `Time: ${timer}s`;
+          if (timer <= 0) finishTrial();
+        }, 1000);
+      } else {
+        finishTrial();
+      }
+    }
+
+    function stopTestFrame() {
+      clearInterval(timerInterval);
+      isRunning = false;
+    }
+
+    function finishTrial() {
+      stopTestFrame();
+      
+      // Save current trial metrics
+      trialHistory.push({
+        trial: currentTrial,
+        metrics: { ...activeMetrics }
+      });
+
+      if (currentTrial < totalTrials) {
+        currentTrial++;
+        resetTrialUI();
+        document.getElementById("status-display").innerText = `Trial ${currentTrial - 1} Saved. Ready for Trial ${currentTrial}`;
+      } else {
+        showFinalResults();
+      }
+    }
+
+    // MediaPipe Frame Processor
     function onResults(results) {
       canvas.width = webcam.videoWidth || 640;
       canvas.height = webcam.videoHeight || 480;
@@ -148,7 +279,6 @@
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // FIX: Draw the camera feed image directly onto the canvas first
       if (results.image) {
         ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
       }
@@ -167,16 +297,15 @@
     }
 
     function captureBaseline(lm) {
-      const nose = lm[0], lHip = lm[23], rHip = lm[24], lAnkle = lm[27], rAnkle = lm[28];
+      const nose = lm[0], lHip = lm[23], rHip = lm[24];
       const midHip = { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 };
       
       const dx = (nose.x - midHip.x) * canvas.width;
       const dy = (nose.y - midHip.y) * canvas.height;
       baseline.torsoLengthPx = Math.sqrt(dx*dx + dy*dy) || 1;
 
+      baseline.ankleL = lm[27]; baseline.ankleR = lm[28];
       baseline.handL = lm[15]; baseline.handR = lm[16];
-      baseline.hipL = lHip; baseline.hipR = rHip;
-      baseline.ankleL = lAnkle; baseline.ankleR = rAnkle;
     }
 
     function processAssessmentLogic(lm) {
@@ -189,46 +318,39 @@
         const dx = (nose.x - midHip.x) * canvas.width;
         const dy = (midHip.y - nose.y) * canvas.height; 
         let angleDeg = Math.abs(Math.atan2(dx, dy) * (180 / Math.PI));
-        
-        if (angleDeg > metrics.maxSwayAngle) metrics.maxSwayAngle = angleDeg;
+        if (angleDeg > activeMetrics.maxSwayAngle) activeMetrics.maxSwayAngle = angleDeg;
 
         const distLHandHip = Math.hypot(lWrist.x - lHip.x, lWrist.y - lHip.y);
         const distRHandHip = Math.hypot(rWrist.x - rHip.x, rWrist.y - rHip.y);
-        if (distLHandHip > 0.18 || distRHandHip > 0.18) {
-          metrics.handsOffHipErrors += 1;
-        }
+        if (distLHandHip > 0.18 || distRHandHip > 0.18) activeMetrics.handsOffHipErrors++;
 
-        const distLAnkle = Math.hypot(lAnkle.x - baseline.ankleL.x, lAnkle.y - baseline.ankleL.y);
-        const distRAnkle = Math.hypot(rAnkle.x - baseline.ankleR.x, rAnkle.y - baseline.ankleR.y);
-        if (distLAnkle > 0.08 || distRAnkle > 0.08) {
-          metrics.stepOutErrors += 1;
+        if (baseline.ankleL && baseline.ankleR) {
+          const distLAnkle = Math.hypot(lAnkle.x - baseline.ankleL.x, lAnkle.y - baseline.ankleL.y);
+          const distRAnkle = Math.hypot(rAnkle.x - baseline.ankleR.x, rAnkle.y - baseline.ankleR.y);
+          if (distLAnkle > 0.08 || distRAnkle > 0.08) activeMetrics.stepOutErrors++;
         }
       } 
       else if (currentTest === 'dynamic') {
-        const reachL = Math.abs(lWrist.x - baseline.handL.x) * canvas.width;
-        const reachR = Math.abs(rWrist.x - baseline.handR.x) * canvas.width;
-        const maxPx = Math.max(reachL, reachR);
-        
-        const normReach = (maxPx / baseline.torsoLengthPx).toFixed(2);
-        if (parseFloat(normReach) > metrics.maxReachNorm) {
-          metrics.maxReachNorm = parseFloat(normReach);
+        if (baseline.handL && baseline.handR) {
+          const reachL = Math.abs(lWrist.x - baseline.handL.x) * canvas.width;
+          const reachR = Math.abs(rWrist.x - baseline.handR.x) * canvas.width;
+          const normReach = (Math.max(reachL, reachR) / baseline.torsoLengthPx).toFixed(2);
+          if (parseFloat(normReach) > activeMetrics.maxReachNorm) activeMetrics.maxReachNorm = parseFloat(normReach);
         }
       } 
       else if (currentTest === 'reactive') {
         if (!fallingObject) spawnFallingObject();
-
         fallingObject.y += 0.015;
         drawFallingObject(fallingObject);
 
         const nosePx = { x: nose.x * canvas.width, y: nose.y * canvas.height };
         const objPx = { x: fallingObject.x * canvas.width, y: fallingObject.y * canvas.height };
-        const dist = Math.hypot(nosePx.x - objPx.x, nosePx.y - objPx.y);
-
-        if (dist < 40) { 
-          metrics.reactiveFailure++;
+        
+        if (Math.hypot(nosePx.x - objPx.x, nosePx.y - objPx.y) < 40) { 
+          activeMetrics.reactiveFailure++;
           spawnFallingObject();
         } else if (fallingObject.y > 1.0) { 
-          metrics.reactiveSuccess++;
+          activeMetrics.reactiveSuccess++;
           spawnFallingObject();
         }
       }
@@ -246,7 +368,7 @@
       ctx.lineWidth = 4;
       ctx.stroke();
 
-      // Key Assessment Landmarks
+      // Landmarks
       [nose, lHip, rHip, lm[15], lm[16], lm[27], lm[28]].forEach(pt => {
         ctx.beginPath();
         ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 6, 0, 2 * Math.PI);
@@ -255,10 +377,7 @@
       });
     }
 
-    function spawnFallingObject() {
-      fallingObject = { x: Math.random() * 0.6 + 0.2, y: 0.0 };
-    }
-
+    function spawnFallingObject() { fallingObject = { x: Math.random() * 0.6 + 0.2, y: 0.0 }; }
     function drawFallingObject(obj) {
       ctx.beginPath();
       ctx.arc(obj.x * canvas.width, obj.y * canvas.height, 20, 0, 2 * Math.PI);
@@ -266,78 +385,57 @@
       ctx.fill();
     }
 
-    window.switchTest = function(type) {
-      if (isRunning) window.toggleTest();
-      currentTest = type;
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
-      
-      timer = (type === 'reactive') ? 60 : 30;
-      document.getElementById("timer-display").innerText = `Time: ${timer}s`;
-    }
-
-    window.toggleTest = function() {
-      const btn = document.getElementById("start-btn");
-      if (!isRunning) {
-        isRunning = true;
-        btn.innerText = "Stop Test";
-        btn.classList.add("btn-danger");
-        resetMetrics();
-        
-        timerInterval = setInterval(() => {
-          timer--;
-          document.getElementById("timer-display").innerText = `Time: ${timer}s`;
-          if (timer <= 0) finishTest();
-        }, 1000);
-      } else {
-        finishTest();
-      }
-    }
-
-    function resetMetrics() {
-      metrics = { maxSwayAngle: 0, handsOffHipErrors: 0, stepOutErrors: 0, maxReachNorm: 0, reactiveSuccess: 0, reactiveFailure: 0 };
-    }
-
-    function finishTest() {
-      clearInterval(timerInterval);
-      isRunning = false;
-      
-      const btn = document.getElementById("start-btn");
-      btn.innerText = "Start Test";
-      btn.classList.remove("btn-danger");
-
-      showResults();
-    }
-
-    function showResults() {
+    // Results Generation
+    function showFinalResults() {
       const modal = document.getElementById("results-modal");
       const body = document.getElementById("results-body");
       
-      let content = "";
-      if (currentTest === 'static') {
-        content = `
-          <div class="metric-row"><span>Max Sway Angle:</span><strong>${metrics.maxSwayAngle.toFixed(1)}°</strong></div>
-          <div class="metric-row"><span>Hands-off-Hip Errors:</span><strong>${Math.floor(metrics.handsOffHipErrors / 10)}</strong></div>
-          <div class="metric-row"><span>Foot Step-Out Errors:</span><strong>${Math.floor(metrics.stepOutErrors / 10)}</strong></div>
-        `;
-      } else if (currentTest === 'dynamic') {
-        content = `
-          <div class="metric-row"><span>Max Reach Distance:</span><strong>${metrics.maxReachNorm} torso units</strong></div>
-        `;
-      } else if (currentTest === 'reactive') {
-        content = `
-          <div class="metric-row"><span>Successful Avoidances:</span><strong>${metrics.reactiveSuccess}</strong></div>
-          <div class="metric-row"><span>Evasion Failures:</span><strong>${metrics.reactiveFailure}</strong></div>
-        `;
-      }
+      let html = "";
       
-      body.innerHTML = content;
-      modal.style.display = "flex";
-    }
+      if (currentTest === 'static') {
+        let sumSway = 0;
+        trialHistory.forEach(t => {
+          sumSway += t.metrics.maxSwayAngle;
+          html += `
+            <div class="trial-box">
+              <h4>Trial ${t.trial}</h4>
+              <div class="metric-row"><span>Max Sway Angle:</span><strong>${t.metrics.maxSwayAngle.toFixed(1)}°</strong></div>
+              <div class="metric-row"><span>Hands-off-Hip Errors:</span><strong>${Math.floor(t.metrics.handsOffHipErrors / 10)}</strong></div>
+              <div class="metric-row"><span>Foot Step-Out Errors:</span><strong>${Math.floor(t.metrics.stepOutErrors / 10)}</strong></div>
+            </div>`;
+        });
+        const avgSway = (sumSway / totalTrials).toFixed(1);
+        html += `<div class="summary-box"><strong>Average Sway Angle:</strong> ${avgSway}°</div>`;
+      } 
+      else if (currentTest === 'dynamic') {
+        let maxReachAll = 0;
+        trialHistory.forEach(t => {
+          if (t.metrics.maxReachNorm > maxReachAll) maxReachAll = t.metrics.maxReachNorm;
+          html += `
+            <div class="trial-box">
+              <h4>Trial ${t.trial}</h4>
+              <div class="metric-row"><span>Max Reach Distance:</span><strong>${t.metrics.maxReachNorm} torso units</strong></div>
+            </div>`;
+        });
+        html += `<div class="summary-box"><strong>Best Overall Reach:</strong> ${maxReachAll} torso units</div>`;
+      } 
+      else if (currentTest === 'reactive') {
+        let totalSucc = 0, totalFail = 0;
+        trialHistory.forEach(t => {
+          totalSucc += t.metrics.reactiveSuccess;
+          totalFail += t.metrics.reactiveFailure;
+          html += `
+            <div class="trial-box">
+              <h4>Trial ${t.trial}</h4>
+              <div class="metric-row"><span>Successful Avoidances:</span><strong>${t.metrics.reactiveSuccess}</strong></div>
+              <div class="metric-row"><span>Evasion Failures:</span><strong>${t.metrics.reactiveFailure}</strong></div>
+            </div>`;
+        });
+        html += `<div class="summary-box"><strong>Total Score:</strong> ${totalSucc} Avoided / ${totalFail} Collisions</div>`;
+      }
 
-    window.closeResults = function() {
-      document.getElementById("results-modal").style.display = "none";
-      switchTest(currentTest);
+      body.innerHTML = html;
+      modal.style.display = "flex";
     }
   </script>
 </body>
