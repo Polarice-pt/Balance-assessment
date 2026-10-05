@@ -230,7 +230,7 @@
       smoothLandmarks: true,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5,
-      selfieMode: true // NATIVE FIX: Mirrors the camera feed and coordinate math automatically
+      selfieMode: true
     });
 
     pose.onResults(onResults);
@@ -336,6 +336,8 @@
       document.getElementById("start-btn").disabled = false;
       document.getElementById("results-modal").style.display = "none";
       
+      fallingObject = null; // Reset the ball between trials
+      
       updateLanguageUI();
       resetActiveMetrics();
     }
@@ -357,12 +359,10 @@
       const btn = document.getElementById("start-btn");
       
       if (isRunning) {
-        // Stop early if actively running
         finishTrial();
       } else if (!isCountingDown) {
-        // Trigger Countdown Sequence
         isCountingDown = true;
-        btn.disabled = true; // Prevent double-clicking
+        btn.disabled = true; 
         btn.innerText = t.btnStarting;
 
         let count = 3;
@@ -381,7 +381,7 @@
             overlay.style.display = "none";
             isCountingDown = false;
             btn.disabled = false;
-            startActualTrial(); // Begin metrics tracking
+            startActualTrial();
           }
         }, 1000);
       }
@@ -429,7 +429,6 @@
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // selfieMode is handling the flip natively, just draw!
       if (results.image) {
         ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
       }
@@ -438,7 +437,6 @@
         const lm = results.poseLandmarks;
         drawPoseOverlay(lm);
 
-        // Calculate baseline continually until test officially starts (even during countdown)
         if (isRunning) {
           processAssessmentLogic(lm);
         } else {
@@ -491,7 +489,8 @@
         }
       } 
       else if (currentTest === 'reactive') {
-        if (!fallingObject) spawnFallingObject();
+        if (!fallingObject) spawnFallingObject(nose.x);
+        
         fallingObject.y += 0.015;
         drawFallingObject(fallingObject);
 
@@ -500,10 +499,10 @@
         
         if (Math.hypot(nosePx.x - objPx.x, nosePx.y - objPx.y) < 40) { 
           activeMetrics.reactiveFailure++;
-          spawnFallingObject();
+          spawnFallingObject(nose.x); 
         } else if (fallingObject.y > 1.0) { 
           activeMetrics.reactiveSuccess++;
-          spawnFallingObject();
+          spawnFallingObject(nose.x); 
         }
       }
     }
@@ -512,7 +511,21 @@
       const nose = lm[0], lHip = lm[23], rHip = lm[24];
       const midHip = { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 };
 
-      // Center Line (Nose to Mid-Hip)
+      // [NEW] Draw Hit-Box for Reactive Balance
+      if (currentTest === 'reactive') {
+        ctx.beginPath();
+        // 40px radius perfectly visualizes the mathematical collision threshold
+        ctx.arc(nose.x * canvas.width, nose.y * canvas.height, 40, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(255, 59, 48, 0.2)"; // Semi-transparent red danger zone
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255, 59, 48, 0.8)";
+        ctx.setLineDash([5, 5]); // Dashed border to look like a UI element
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset line dash so we don't mess up the green center line
+      }
+
+      // Center Line
       ctx.beginPath();
       ctx.moveTo(nose.x * canvas.width, nose.y * canvas.height);
       ctx.lineTo(midHip.x * canvas.width, midHip.y * canvas.height);
@@ -520,7 +533,7 @@
       ctx.lineWidth = 4;
       ctx.stroke();
 
-      // Tracking Landmarks
+      // Landmarks
       [nose, lHip, rHip, lm[15], lm[16], lm[27], lm[28]].forEach(pt => {
         ctx.beginPath();
         ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 6, 0, 2 * Math.PI);
@@ -529,7 +542,11 @@
       });
     }
 
-    function spawnFallingObject() { fallingObject = { x: Math.random() * 0.6 + 0.2, y: 0.0 }; }
+    function spawnFallingObject(noseX) { 
+      const safeX = Math.max(0.1, Math.min(noseX, 0.9));
+      fallingObject = { x: safeX, y: 0.0 }; 
+    }
+    
     function drawFallingObject(obj) {
       ctx.beginPath();
       ctx.arc(obj.x * canvas.width, obj.y * canvas.height, 20, 0, 2 * Math.PI);
@@ -591,7 +608,6 @@
       modal.style.display = "flex";
     }
 
-    // Initialize UI on load
     updateLanguageUI();
   </script>
 </body>
